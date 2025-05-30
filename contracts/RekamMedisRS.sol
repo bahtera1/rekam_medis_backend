@@ -25,7 +25,6 @@ contract RekamMedisRS {
 
     struct Pasien {
         string nama;
-        uint umur;
         string golonganDarah;
         string tanggalLahir;
         string gender;
@@ -91,9 +90,6 @@ contract RekamMedisRS {
     );
 
     constructor() {
-        // Alamat superAdmin bisa di-set saat deployment atau diubah nanti
-        // Untuk pengembangan, msg.sender saat deployment akan jadi superAdmin awal
-        // superAdmin = msg.sender;
         superAdmin = 0xB0dC0Bf642d339517438017Fc185Bb0f758A01D2; // Sesuai kode Anda
     }
 
@@ -323,7 +319,6 @@ contract RekamMedisRS {
         isPasien[_pasien] = true;
         dataPasien[_pasien] = Pasien({
             nama: _nama,
-            umur: 0, // Bisa diisi nanti oleh pasien/admin
             golonganDarah: "",
             tanggalLahir: "",
             gender: "",
@@ -339,7 +334,6 @@ contract RekamMedisRS {
 
     function selfRegisterPasien(
         string calldata _nama,
-        uint _umur,
         string calldata _golonganDarah,
         string calldata _tanggalLahir,
         string calldata _gender,
@@ -358,7 +352,6 @@ contract RekamMedisRS {
         isPasien[msg.sender] = true;
         dataPasien[msg.sender] = Pasien({
             nama: _nama,
-            umur: _umur,
             golonganDarah: _golonganDarah,
             tanggalLahir: _tanggalLahir,
             gender: _gender,
@@ -383,7 +376,6 @@ contract RekamMedisRS {
         view
         returns (
             string memory nama,
-            uint umur,
             string memory golonganDarah,
             string memory tanggalLahir,
             string memory gender,
@@ -397,7 +389,6 @@ contract RekamMedisRS {
         Pasien storage p = dataPasien[_pasien];
         return (
             p.nama,
-            p.umur,
             p.golonganDarah,
             p.tanggalLahir,
             p.gender,
