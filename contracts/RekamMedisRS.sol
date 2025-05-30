@@ -37,11 +37,10 @@ contract RekamMedisRS {
     mapping(address => Pasien) public dataPasien;
     mapping(address => bool) public isPasien;
 
-
-struct UpdateInfo {
-    address dokter; // alamat dokter yang update
-    uint256 timestamp; // waktu update (block.timestamp)
-}
+    struct UpdateInfo {
+        address dokter; // alamat dokter yang update
+        uint256 timestamp; // waktu update (block.timestamp)
+    }
 
     struct RekamMedisData {
         uint id;
@@ -73,7 +72,13 @@ struct UpdateInfo {
         string diagnosa,
         bool valid
     );
-    event RekamMedisDiperbarui(uint id, string diagnosa, string catatan);
+    event RekamMedisDiperbarui(
+        uint id,
+        string diagnosa,
+        string catatan,
+        address dokter,
+        uint timestamp
+    );
 
     constructor() {
         superAdmin = 0xB0dC0Bf642d339517438017Fc185Bb0f758A01D2;
@@ -125,6 +130,7 @@ struct UpdateInfo {
         _;
     }
 
+
     // Fungsi SuperAdmin mendaftarkan Admin RS baru
     function registerAdminRS(
         address _admin,
@@ -138,7 +144,9 @@ struct UpdateInfo {
         daftarAdmin.push(_admin);
         emit AdminRSTerdaftar(_admin, _namaRS);
     }
-
+    function getAllAdminRSAddresses() external view returns (address[] memory) {
+        return daftarAdmin;
+    }
     // SuperAdmin ubah status admin RS (aktif/nonaktif)
     function setStatusAdminRS(
         address _admin,
@@ -438,28 +446,32 @@ struct UpdateInfo {
         return false;
     }
 
-function updateRekamMedis(
-    uint _id,
-    string calldata _diagnosa,
-    string calldata _foto,
-    string calldata _catatan
-) external hanyaDokterAktifUntukPasien(rekamMedis[_id].pasien) {
-    RekamMedisData storage r = rekamMedis[_id];
-    rekamMedisVersions[_id].push(r);
+    function updateRekamMedis(
+        uint _id,
+        string calldata _diagnosa,
+        string calldata _foto,
+        string calldata _catatan
+    ) external hanyaDokterAktifUntukPasien(rekamMedis[_id].pasien) {
+        RekamMedisData storage r = rekamMedis[_id];
+        rekamMedisVersions[_id].push(r);
 
-    r.diagnosa = _diagnosa;
-    r.foto = _foto;
-    r.catatan = _catatan;
+        r.diagnosa = _diagnosa;
+        r.foto = _foto;
+        r.catatan = _catatan;
 
-    // Simpan info update
-    rekamMedisUpdateHistory[_id].push(UpdateInfo({
-        dokter: msg.sender,
-        timestamp: block.timestamp
-    }));
+        // Simpan info update
+        rekamMedisUpdateHistory[_id].push(
+            UpdateInfo({dokter: msg.sender, timestamp: block.timestamp})
+        );
 
-    emit RekamMedisDiperbarui(_id, _diagnosa, _catatan);
-}
-
+        emit RekamMedisDiperbarui(
+            _id,
+            _diagnosa,
+            _catatan,
+            msg.sender,
+            block.timestamp
+        );
+    }
 
     // Ambil rekam medis by pasien
     function getRekamMedisIdsByPasien(
@@ -492,16 +504,18 @@ function updateRekamMedis(
     ) external view returns (RekamMedisData[] memory) {
         return rekamMedisVersions[_id];
     }
-function getRekamMedisUpdateHistory(uint _id) external view returns (address[] memory, uint256[] memory) {
-    uint len = rekamMedisUpdateHistory[_id].length;
-    address[] memory dokters = new address[](len);
-    uint256[] memory times = new uint256[](len);
-    for (uint i = 0; i < len; i++) {
-        dokters[i] = rekamMedisUpdateHistory[_id][i].dokter;
-        times[i] = rekamMedisUpdateHistory[_id][i].timestamp;
+    function getRekamMedisUpdateHistory(
+        uint _id
+    ) external view returns (address[] memory, uint256[] memory) {
+        uint len = rekamMedisUpdateHistory[_id].length;
+        address[] memory dokters = new address[](len);
+        uint256[] memory times = new uint256[](len);
+        for (uint i = 0; i < len; i++) {
+            dokters[i] = rekamMedisUpdateHistory[_id][i].dokter;
+            times[i] = rekamMedisUpdateHistory[_id][i].timestamp;
+        }
+        return (dokters, times);
     }
-    return (dokters, times);
-}
 
     // Nonaktifkan rekam medis (admin RS saja)
     function nonaktifkanRekamMedis(uint _id) external hanyaAdminRS {
