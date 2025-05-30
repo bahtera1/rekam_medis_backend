@@ -79,6 +79,13 @@ contract RekamMedisRS {
         address dokter,
         uint timestamp
     );
+    event DokterInfoDiperbarui(
+        address indexed dokter,
+        string nama,
+        string spesialisasi,
+        string nomorLisensi,
+        address indexed adminRS
+    );
 
     constructor() {
         superAdmin = 0xB0dC0Bf642d339517438017Fc185Bb0f758A01D2;
@@ -130,7 +137,6 @@ contract RekamMedisRS {
         _;
     }
 
-
     // Fungsi SuperAdmin mendaftarkan Admin RS baru
     function registerAdminRS(
         address _admin,
@@ -171,27 +177,6 @@ contract RekamMedisRS {
         return daftarAdmin[idx];
     }
 
-    // // Admin RS mendaftarkan dokter baru
-    // function registerDokter(
-    //     address _dokter,
-    //     string calldata _nama,
-    //     string calldata _spesialisasi,
-    //     string calldata _nomorLisensi
-    // ) external hanyaAdminRS {
-    //     require(!isDokter[_dokter], "Sudah dokter.");
-    //     require(!isPasien[_dokter], "Alamat milik pasien.");
-    //     isDokter[_dokter] = true;
-    //     dataDokter[_dokter] = Dokter({
-    //         nama: _nama,
-    //         spesialisasi: _spesialisasi,
-    //         nomorLisensi: _nomorLisensi,
-    //         aktif: true,
-    //         assignedPasien: new address,
-    //         adminRS: msg.sender
-    //     });
-    //     emit DokterTerdaftar(_dokter, _nama, msg.sender);
-    // }
-
     // Admin RS ubah status dokter
     function setStatusDokter(
         address _dokter,
@@ -212,12 +197,6 @@ contract RekamMedisRS {
     }
 
     address[] public daftarDokter;
-
-    // Admin RS bisa panggil fungsi ini agar menambah daftarDokter (supaya totalDokter, getDokterByIndex jalan)
-    // Jangan lupa push saat registerDokter:
-    // daftarDokter.push(_dokter);
-    // Jadi tambahkan push di registerDokter:
-    // daftarDokter.push(_dokter);
 
     // Admin RS mendaftarkan dokter baru dan simpan daftar
     function registerDokter(
@@ -246,7 +225,36 @@ contract RekamMedisRS {
         require(idx < daftarDokter.length, "Index invalid.");
         return daftarDokter[idx];
     }
+    // Fungsi untuk Admin RS memperbarui informasi dokter
+    function updateDokterInfo(
+        address _dokter,
+        string calldata _namaBaru,
+        string calldata _spesialisasiBaru,
+        string calldata _nomorLisensiBaru
+    ) external hanyaAdminRS {
+        require(isDokter[_dokter], "Dokter tidak terdaftar di sistem.");
+        require(
+            dataDokter[_dokter].adminRS == msg.sender,
+            "Anda bukan admin RS yang berhak untuk dokter ini."
+        );
 
+        // Pastikan nilai baru tidak kosong jika itu adalah kebijakan
+        // Misalnya, jika nama tidak boleh kosong:
+        // require(bytes(_namaBaru).length > 0, "Nama baru tidak boleh kosong.");
+
+        Dokter storage dokterToUpdate = dataDokter[_dokter];
+        dokterToUpdate.nama = _namaBaru;
+        dokterToUpdate.spesialisasi = _spesialisasiBaru;
+        dokterToUpdate.nomorLisensi = _nomorLisensiBaru;
+
+        emit DokterInfoDiperbarui(
+            _dokter,
+            _namaBaru,
+            _spesialisasiBaru,
+            _nomorLisensiBaru,
+            msg.sender
+        );
+    }
     // Ambil detail dokter
     function getDokter(
         address _dokter
