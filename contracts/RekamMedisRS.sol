@@ -89,6 +89,8 @@ contract RekamMedisRS {
         uint timestamp
     );
 
+    event PasienDiunassignDariDokter(address dokter, address pasien);
+
     constructor() {
         superAdmin = 0xB0dC0Bf642d339517438017Fc185Bb0f758A01D2; // Sesuai kode Anda
     }
@@ -424,6 +426,39 @@ contract RekamMedisRS {
         }
         listPasienDitugaskan.push(_pasien);
         emit PasienDiassignKeDokter(_dokter, _pasien);
+    }
+
+    function unassignPasienFromDokter(
+        address _dokter,
+        address _pasien
+    ) external hanyaAdminRS {
+        require(isDokter[_dokter], "Dokter tidak terdaftar.");
+        require(
+            dataDokter[_dokter].adminRS == msg.sender,
+            "Dokter ini tidak terdaftar di rumah sakit Anda."
+        );
+        require(isPasien[_pasien], "Pasien tidak terdaftar.");
+        require(
+            dataPasien[_pasien].rumahSakitPenanggungJawab == msg.sender,
+            "Pasien ini tidak terdaftar di rumah sakit Anda."
+        );
+
+        bool found = false;
+        address[] storage listPasienDitugaskan = dataDokter[_dokter]
+            .assignedPasien;
+        for (uint i = 0; i < listPasienDitugaskan.length; i++) {
+            if (listPasienDitugaskan[i] == _pasien) {
+                // Geser elemen terakhir ke posisi saat ini dan kurangi panjang array
+                listPasienDitugaskan[i] = listPasienDitugaskan[
+                    listPasienDitugaskan.length - 1
+                ];
+                listPasienDitugaskan.pop();
+                found = true;
+                break;
+            }
+        }
+        require(found, "Pasien tidak ditugaskan ke dokter ini.");
+        emit PasienDiunassignDariDokter(_dokter, _pasien); // Tambahkan event ini juga di atas
     }
 
     function isAssigned(
