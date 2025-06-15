@@ -91,6 +91,24 @@ contract RekamMedisRS {
 
     event PasienDiunassignDariDokter(address dokter, address pasien);
 
+    // --- EVENT BARU UNTUK PASIEN ---
+    event PasienDataDiperbarui(
+        address indexed pasien,
+        string nama,
+        string golonganDarah,
+        string tanggalLahir,
+        string gender,
+        string alamat,
+        string noTelepon,
+        string email
+    );
+    event PasienRumahSakitDiperbarui(
+        address indexed pasien,
+        address indexed oldAdminRS,
+        address indexed newAdminRS
+    );
+    // ----------------------------
+
     constructor() {
         superAdmin = 0xB0dC0Bf642d339517438017Fc185Bb0f758A01D2; // Sesuai kode Anda
     }
@@ -367,6 +385,67 @@ contract RekamMedisRS {
         emit PasienTerdaftar(msg.sender, _nama, _adminRS);
     }
 
+    // --- FUNGSI BARU UNTUK PASIEN: UPDATE DATA DIRI ---
+    function updatePasienData(
+        string calldata _nama,
+        string calldata _golonganDarah,
+        string calldata _tanggalLahir,
+        string calldata _gender,
+        string calldata _alamat,
+        string calldata _noTelepon,
+        string calldata _email
+    ) external hanyaPasien(msg.sender) {
+        require(
+            dataPasien[msg.sender].exists,
+            "Data pasien Anda tidak ditemukan."
+        );
+
+        Pasien storage pasienToUpdate = dataPasien[msg.sender];
+        pasienToUpdate.nama = _nama;
+        pasienToUpdate.golonganDarah = _golonganDarah;
+        pasienToUpdate.tanggalLahir = _tanggalLahir;
+        pasienToUpdate.gender = _gender;
+        pasienToUpdate.alamat = _alamat;
+        pasienToUpdate.noTelepon = _noTelepon;
+        pasienToUpdate.email = _email;
+
+        emit PasienDataDiperbarui(
+            msg.sender,
+            _nama,
+            _golonganDarah,
+            _tanggalLahir,
+            _gender,
+            _alamat,
+            _noTelepon,
+            _email
+        );
+    }
+    // ------------------------------------------------
+
+    // --- FUNGSI BARU UNTUK PASIEN: UPDATE RUMAH SAKIT PENANGGUNG JAWAB ---
+    function updatePasienRumahSakit(
+        address _newAdminRS
+    ) external hanyaPasien(msg.sender) {
+        require(
+            dataPasien[msg.sender].exists,
+            "Data pasien Anda tidak ditemukan."
+        );
+        require(
+            dataAdmin[_newAdminRS].aktif,
+            "Rumah Sakit baru tidak aktif atau tidak valid."
+        );
+        require(
+            dataPasien[msg.sender].rumahSakitPenanggungJawab != _newAdminRS,
+            "Anda sudah terdaftar di rumah sakit ini."
+        );
+
+        address oldAdminRS = dataPasien[msg.sender].rumahSakitPenanggungJawab;
+        dataPasien[msg.sender].rumahSakitPenanggungJawab = _newAdminRS;
+
+        emit PasienRumahSakitDiperbarui(msg.sender, oldAdminRS, _newAdminRS);
+    }
+    // ------------------------------------------------------------------
+
     function getDaftarPasien() external view returns (address[] memory) {
         return daftarPasien;
     }
@@ -411,10 +490,17 @@ contract RekamMedisRS {
             "Dokter ini tidak terdaftar di rumah sakit Anda."
         );
         require(isPasien[_pasien], "Pasien tidak terdaftar.");
+        // Dikembalikan ke logika lama yang memungkinkan AdminRS meng-assign pasien yang rumahSakitPenanggungJawab-nya address(0)
         require(
-            dataPasien[_pasien].rumahSakitPenanggungJawab == msg.sender,
-            "Pasien ini tidak terdaftar di rumah sakit Anda."
+            dataPasien[_pasien].rumahSakitPenanggungJawab == msg.sender ||
+                dataPasien[_pasien].rumahSakitPenanggungJawab == address(0),
+            "Pasien ini tidak terdaftar di rumah sakit Anda atau sudah di-assign ke RS lain."
         );
+        // Jika pasien self-register dan belum punya RS penanggung jawab, set RS penanggung jawabnya ke RS Admin ini
+        if (dataPasien[_pasien].rumahSakitPenanggungJawab == address(0)) {
+            dataPasien[_pasien].rumahSakitPenanggungJawab = msg.sender;
+            emit PasienPindahRS(_pasien, msg.sender);
+        }
 
         address[] storage listPasienDitugaskan = dataDokter[_dokter]
             .assignedPasien;
@@ -474,7 +560,6 @@ contract RekamMedisRS {
         return false;
     }
 
-    // --- MODIFIKASI DI SINI ---
     function tambahRekamMedis(
         address _pasien,
         string calldata _diagnosa,
@@ -512,15 +597,9 @@ contract RekamMedisRS {
         });
         rekamMedisByPasien[_pasien].push(newId);
 
-        // --- BARIS TAMBAHAN UNTUK MENCATAT RIWAYAT PEMBUATAN AWAL ---
         rekamMedisUpdateHistory[newId].push(
-            UpdateInfo({
-                dokter: msg.sender, // Menyimpan alamat msg.sender (pembuat)
-                timestamp: block.timestamp
-            })
+            UpdateInfo({dokter: msg.sender, timestamp: block.timestamp})
         );
-        // -----------------------------------------------------------
-
         emit RekamMedisDitambahkan(newId, _pasien, _diagnosa, true);
     }
 
