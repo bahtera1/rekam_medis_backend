@@ -341,15 +341,10 @@ contract RekamMedisRS {
         string calldata _gender,
         string calldata _alamat,
         string calldata _noTelepon,
-        string calldata _email,
-        address _adminRS // Admin RS yang dipilih pasien sebagai penanggung jawab awal
+        string calldata _email
     ) external {
         require(!isPasien[msg.sender], "Anda sudah terdaftar sebagai pasien.");
         require(!isDokter[msg.sender], "Alamat ini terdaftar sebagai dokter.");
-        require(
-            dataAdmin[_adminRS].aktif,
-            "Rumah Sakit yang dipilih tidak aktif atau tidak valid."
-        );
 
         isPasien[msg.sender] = true;
         dataPasien[msg.sender] = Pasien({
@@ -360,11 +355,11 @@ contract RekamMedisRS {
             alamat: _alamat,
             noTelepon: _noTelepon,
             email: _email,
-            rumahSakitPenanggungJawab: _adminRS,
+            rumahSakitPenanggungJawab: address(0),
             exists: true
         });
         daftarPasien.push(msg.sender);
-        emit PasienTerdaftar(msg.sender, _nama, _adminRS);
+        emit PasienTerdaftar(msg.sender, _nama, address(0));
     }
 
     function getDaftarPasien() external view returns (address[] memory) {
@@ -411,10 +406,17 @@ contract RekamMedisRS {
             "Dokter ini tidak terdaftar di rumah sakit Anda."
         );
         require(isPasien[_pasien], "Pasien tidak terdaftar.");
+        // Izinkan AdminRS assign pasien yang rumahSakitPenanggungJawab-nya address(0) atau RS-nya sama
         require(
-            dataPasien[_pasien].rumahSakitPenanggungJawab == msg.sender,
-            "Pasien ini tidak terdaftar di rumah sakit Anda."
+            dataPasien[_pasien].rumahSakitPenanggungJawab == msg.sender ||
+                dataPasien[_pasien].rumahSakitPenanggungJawab == address(0),
+            "Pasien ini tidak terdaftar di rumah sakit Anda atau sudah di-assign ke RS lain."
         );
+        // Jika pasien self-register dan belum punya RS penanggung jawab, set RS penanggung jawabnya ke RS Admin ini
+        if (dataPasien[_pasien].rumahSakitPenanggungJawab == address(0)) {
+            dataPasien[_pasien].rumahSakitPenanggungJawab = msg.sender;
+            emit PasienPindahRS(_pasien, msg.sender); // Bisa pakai event ini atau buat baru
+        }
 
         address[] storage listPasienDitugaskan = dataDokter[_dokter]
             .assignedPasien;
