@@ -38,116 +38,26 @@ contract RekamMedisRS {
     mapping(address => bool) public isPasien;
     address[] public daftarPasien;
 
-    // Struct untuk menyimpan info update/pembuatan
-    struct UpdateInfo {
-        address aktor; // Alamat aktor yang melakukan update/pembuatan (bisa dokter atau pasien)
-        uint256 timestamp; // Waktu update/pembuatan (block.timestamp)
-    }
-
-    // struct RekamMedisData dengan tambahan pembuat dan waktu pembuatan awal
+    // Struct RekamMedisData yang disederhanakan
     struct RekamMedisData {
         uint id;
         address pasien;
         string diagnosa;
         string foto;
         string catatan;
-        bool valid;
-        address pembuatAwal; // BARU: Alamat pembuat rekam medis pertama kali
-        uint256 timestampAwal; // BARU: Timestamp pembuatan rekam medis pertama kali
-    }
-
-    // REVISI Kecil di Smart Contract (Opsional tapi bisa membuat Frontend lebih mudah)
-    // Tidak mengubah RekamMedisData struct atau fungsi tambah/update utama
-    // Tujuan: Membuat fungsi view yang mengembalikan histori lengkap per Rekam Medis ID
-
-    // Tambahkan struct untuk riwayat RM yang lebih komprehensif
-    struct FullRMHistoryEntry {
-        uint id_rm;
-        uint versiKe;
-        string diagnosa;
-        string foto;
-        string catatan;
-        bool valid;
-        address aktor; // Pembuat/pengupdate
-        uint256 timestamp; // Waktu perubahan
-        string jenisPerubahan; // "Creation" atau "Update"
-    }
-
-    function getFullRekamMedisHistory(
-        uint _id
-    ) external view returns (FullRMHistoryEntry[] memory) {
-        require(
-            rekamMedis[_id].pasien != address(0),
-            "Rekam medis tidak ditemukan."
-        );
-
-        RekamMedisData storage currentRM = rekamMedis[_id];
-        RekamMedisData[] storage historicalVersions = rekamMedisVersions[_id];
-        UpdateInfo[] storage updateEvents = rekamMedisUpdateHistory[_id]; // ini hanya update events
-
-        // Hitung total entri: 1 (creation) + jumlah historical versions
-        uint totalEntries = 1 + historicalVersions.length;
-        FullRMHistoryEntry[] memory history = new FullRMHistoryEntry[](
-            totalEntries
-        );
-
-        uint counter = 0;
-
-        // Tambahkan entri pembuatan awal
-        history[counter] = FullRMHistoryEntry({
-            id_rm: currentRM.id,
-            versiKe: 0, // Akan diisi di frontend setelah sort
-            diagnosa: currentRM.diagnosa,
-            foto: currentRM.foto,
-            catatan: currentRM.catatan,
-            valid: currentRM.valid,
-            aktor: currentRM.pembuatAwal,
-            timestamp: currentRM.timestampAwal,
-            jenisPerubahan: "Creation"
-        });
-        counter++;
-
-        // Tambahkan entri untuk setiap versi historis
-        // Setiap `historicalVersions[i]` adalah snapshot *sebelum* `updateEvents[i]` terjadi.
-        // Jadi, kita ingin menampilkan `historicalVersions[i]` sebagai versi yang *diubah* oleh `updateEvents[i]`.
-        for (uint i = 0; i < historicalVersions.length; i++) {
-            // Asumsi updateEvents[i] cocok dengan historicalVersions[i] yang di-snapshot sebelumnya
-            UpdateInfo memory currentUpdateInfo = updateEvents[i]; // Info aktor/timestamp dari event update
-
-            history[counter] = FullRMHistoryEntry({
-                id_rm: historicalVersions[i].id,
-                versiKe: 0, // Akan diisi di frontend
-                diagnosa: historicalVersions[i].diagnosa,
-                foto: historicalVersions[i].foto,
-                catatan: historicalVersions[i].catatan,
-                valid: historicalVersions[i].valid,
-                aktor: currentUpdateInfo.aktor,
-                timestamp: currentUpdateInfo.timestamp,
-                jenisPerubahan: "Update"
-            });
-            counter++;
-        }
-
-        // Perhatikan: Data 'currentRM' (versi paling baru) tidak secara eksplisit di return di sini sebagai versi terakhir
-        // karena historicalVersions hanya menyimpan versi LAMA.
-        // Jika Anda ingin versi TERBARU (currentRM) juga muncul di sini dengan info update terakhirnya,
-        // maka perlu penyesuaian di `updateRekamMedis` untuk menyimpan CURRENT state ke history,
-        // atau di frontend menangani currentRM secara terpisah seperti sebelumnya.
-        // Untuk kesederhanaan, kita akan teruskan data terbaru (currentRM) dari getRekamMedis di frontend.
-
-        return history;
+        bool valid; // Tetap dipertahankan untuk menandai RM tidak berlaku
+        address pembuat; // Pembuat RM ini
+        uint256 timestampPembuatan; // Waktu pembuatan RM ini
+        string tipeRekamMedis; // Jenis rekam medis (Pemeriksaan, Lab, Resep, dll.)
     }
     mapping(uint => RekamMedisData) public rekamMedis;
-    mapping(address => uint[]) public rekamMedisByPasien;
+    mapping(address => uint[]) public rekamMedisByPasien; // Daftar ID RM untuk pasien
     uint public rekamMedisCount;
 
-    // History versi rekam medis (snapshot data RM sebelum update)
-    mapping(uint => RekamMedisData[]) public rekamMedisVersions; // Akan menyimpan snapshot lengkap, termasuk pembuatAwal/timestampAwal
+    // mapping rekamMedisVersions, rekamMedisUpdateHistory, struct UpdateInfo,
+    // dan struct FullRMHistoryEntry DIHAPUS karena tidak ada lagi versi atau history update per ID RM yang kompleks.
 
-    // History update rekam medis (siapa dan kapan dilakukan update, TIDAK termasuk pembuatan awal)
-    mapping(uint => UpdateInfo[]) public rekamMedisUpdateHistory;
-
-    // Events
+    // Events (dimodifikasi)
     event AdminRSTerdaftar(address indexed admin, string namaRumahSakit);
     event AdminRSStatusDiubah(address indexed admin, bool aktif);
     event DokterTerdaftar(address indexed dokter, string nama, address adminRS);
@@ -166,22 +76,22 @@ contract RekamMedisRS {
         address newAdminRS
     );
     event PasienDiassignKeDokter(address dokter, address pasien);
-    event PasienDiunassignDariDokter(address dokter, address pasien); // Pastikan ini juga ada
+    event PasienDiunassignDariDokter(address dokter, address pasien);
+
+    // Event RekamMedisDitambahkan dimodifikasi
     event RekamMedisDitambahkan(
         uint id,
         address pasien,
         string diagnosa,
-        address pembuat, // Tambahkan pembuat dan waktu pembuatan ke event ini
+        string foto,
+        string catatan,
+        string tipeRekamMedis,
+        address pembuat,
         uint timestamp,
         bool valid
     );
-    event RekamMedisDiperbarui(
-        uint id,
-        string diagnosa,
-        string catatan,
-        address updater, // Aktor yang memperbarui
-        uint timestamp
-    );
+    // Event RekamMedisDiperbarui DIHAPUS (karena tidak ada update)
+
     event PasienDataDiperbarui(
         address indexed pasien,
         string nama,
@@ -194,10 +104,10 @@ contract RekamMedisRS {
     );
 
     constructor() {
-        superAdmin = 0xB0dC0Bf642d339517438017Fc185Bb0f758A01D2; // Ganti dengan alamat super admin Anda
+        superAdmin = 0xB0dC0Bf642d339517438017Fc185Bb0f758A01D2; // << GANTI DENGAN ALAMAT SUPER ADMIN ANDA >>
     }
 
-    // Modifier
+    // Modifier (Tidak ada perubahan di sini)
     modifier hanyaSuperAdmin() {
         require(
             msg.sender == superAdmin,
@@ -222,6 +132,7 @@ contract RekamMedisRS {
         _;
     }
 
+    // Modifier hanyaDokterAktifUntukPasien ini masih digunakan oleh 'tambahRekamMedis'
     modifier hanyaDokterAktifUntukPasien(address _pasien) {
         require(
             isDokter[msg.sender] && dataDokter[msg.sender].aktif,
@@ -257,7 +168,7 @@ contract RekamMedisRS {
         _;
     }
 
-    // --- Admin RS Functions ---
+    // --- Admin RS Functions (Tidak ada perubahan signifikan) ---
     function registerAdminRS(
         address _admin,
         string calldata _namaRS
@@ -296,18 +207,17 @@ contract RekamMedisRS {
         return daftarAdmin[idx];
     }
 
-    // Fungsi untuk mendapatkan nama RS dari alamat AdminRS
     function getNamaRumahSakitByAdmin(
         address _adminRS
     ) external view returns (string memory) {
         require(
-            dataAdmin[_adminRS].aktif,
-            "Admin RS tidak ditemukan atau tidak aktif."
+            bytes(dataAdmin[_adminRS].namaRumahSakit).length > 0,
+            "Admin RS tidak ditemukan."
         );
         return dataAdmin[_adminRS].namaRumahSakit;
     }
 
-    // --- Dokter Functions ---
+    // --- Dokter Functions (Tidak ada perubahan signifikan) ---
     function registerDokter(
         address _dokter,
         string calldata _nama,
@@ -329,7 +239,7 @@ contract RekamMedisRS {
             nomorLisensi: _nomorLisensi,
             aktif: true,
             assignedPasien: new address[](0),
-            adminRS: msg.sender // Admin RS yang mendaftarkan
+            adminRS: msg.sender
         });
         daftarDokter.push(_dokter);
         emit DokterTerdaftar(_dokter, _nama, msg.sender);
@@ -394,7 +304,7 @@ contract RekamMedisRS {
             string memory nomorLisensi,
             bool aktif,
             address[] memory pasienList,
-            address adminRS // Alamat Admin RS dokter
+            address adminRS
         )
     {
         require(isDokter[_dokter], "Dokter tidak ditemukan.");
@@ -420,7 +330,7 @@ contract RekamMedisRS {
     function registerPasien(
         address _pasien,
         string calldata _nama,
-        address _adminRS // Alamat Admin RS yang mendaftarkan
+        address _adminRS
     ) external hanyaAdminRS {
         require(
             !isPasien[_pasien],
@@ -448,7 +358,7 @@ contract RekamMedisRS {
             alamat: "",
             noTelepon: "",
             email: "",
-            rumahSakitPenanggungJawab: _adminRS, // Set RS penanggung jawab saat pendaftaran
+            rumahSakitPenanggungJawab: _adminRS,
             exists: true
         });
         daftarPasien.push(_pasien);
@@ -463,7 +373,7 @@ contract RekamMedisRS {
         string calldata _alamat,
         string calldata _noTelepon,
         string calldata _email,
-        address _adminRS // Admin RS yang dipilih pasien sebagai penanggung jawab awal
+        address _adminRS
     ) external {
         require(!isPasien[msg.sender], "Anda sudah terdaftar sebagai pasien.");
         require(!isDokter[msg.sender], "Alamat ini terdaftar sebagai dokter.");
@@ -590,20 +500,14 @@ contract RekamMedisRS {
         );
         require(isPasien[_pasien], "Pasien tidak terdaftar.");
 
-        // AdminRS hanya bisa mengassign pasien yang rumahSakitPenanggungJawab-nya adalah dirinya sendiri
-        // atau pasien yang belum memiliki RS penanggung jawab (address(0))
         require(
             dataPasien[_pasien].rumahSakitPenanggungJawab == msg.sender ||
                 dataPasien[_pasien].rumahSakitPenanggungJawab == address(0),
             "Pasien ini tidak terdaftar di rumah sakit Anda atau sudah di-assign ke RS lain."
         );
 
-        // Jika pasien self-register dan belum punya RS penanggung jawab, set RS penanggung jawabnya ke RS Admin ini
         if (dataPasien[_pasien].rumahSakitPenanggungJawab == address(0)) {
             dataPasien[_pasien].rumahSakitPenanggungJawab = msg.sender;
-            // No explicit event for this, as PasienTerdaftar covers initial RS assignment.
-            // If you need to log this specific change when admin assigns, you can emit PasienPindahRS here
-            // emit PasienPindahRS(_pasien, address(0), msg.sender);
         }
 
         bool alreadyAssigned = false;
@@ -670,15 +574,18 @@ contract RekamMedisRS {
     }
 
     // --- Rekam Medis Functions ---
+    // Fungsi tambahRekamMedis dimodifikasi untuk menerima tipeRekamMedis
+    // dan sekarang selalu membuat Rekam Medis baru, bukan update versi.
     function tambahRekamMedis(
         address _pasien,
         string calldata _diagnosa,
         string calldata _foto,
-        string calldata _catatan
+        string calldata _catatan,
+        string calldata _tipeRekamMedis // BARU
     ) external {
         bool isValidActor = false;
-        if (msg.sender == _pasien && isPasien[_pasien]) {
-            isValidActor = true; // Pasien bisa menambah RM sendiri
+        if (msg.sender == _pasien && isPasien[msg.sender]) {
+            isValidActor = true;
         } else if (isDokter[msg.sender] && dataDokter[msg.sender].aktif) {
             if (
                 dataPasien[_pasien].exists &&
@@ -686,7 +593,7 @@ contract RekamMedisRS {
                 dataPasien[_pasien].rumahSakitPenanggungJawab &&
                 isAssigned(msg.sender, _pasien)
             ) {
-                isValidActor = true; // Dokter yang ditugaskan bisa menambah RM
+                isValidActor = true;
             }
         }
         require(
@@ -704,67 +611,29 @@ contract RekamMedisRS {
             foto: _foto,
             catatan: _catatan,
             valid: true,
-            pembuatAwal: msg.sender, // BARU
-            timestampAwal: block.timestamp // BARU
+            pembuat: msg.sender,
+            timestampPembuatan: block.timestamp,
+            tipeRekamMedis: _tipeRekamMedis
         });
         rekamMedisByPasien[_pasien].push(newId);
 
-        // rekamMedisUpdateHistory TIDAK digunakan untuk pembuatan awal
         emit RekamMedisDitambahkan(
             newId,
             _pasien,
             _diagnosa,
+            _foto,
+            _catatan,
+            _tipeRekamMedis,
             msg.sender,
             block.timestamp,
             true
-        ); // Update Event
-    }
-
-    function updateRekamMedis(
-        uint _id,
-        string calldata _diagnosa,
-        string calldata _foto,
-        string calldata _catatan
-    ) external hanyaDokterAktifUntukPasien(rekamMedis[_id].pasien) {
-        RekamMedisData storage r = rekamMedis[_id];
-        require(
-            r.pasien != address(0),
-            "Rekam medis tidak ditemukan atau ID tidak valid."
-        );
-        require(r.valid, "Rekam medis ini sudah tidak valid/dinonaktifkan.");
-
-        // Simpan versi lama sebelum update ke rekamMedisVersions
-        rekamMedisVersions[_id].push(
-            RekamMedisData({
-                id: r.id,
-                pasien: r.pasien,
-                diagnosa: r.diagnosa,
-                foto: r.foto,
-                catatan: r.catatan,
-                valid: r.valid,
-                pembuatAwal: r.pembuatAwal, // Sertakan data pembuat/waktu awal
-                timestampAwal: r.timestampAwal
-            })
-        );
-
-        // Update data rekam medis utama
-        r.diagnosa = _diagnosa;
-        r.foto = _foto;
-        r.catatan = _catatan;
-
-        // Simpan info update (siapa dan kapan) ke rekamMedisUpdateHistory
-        rekamMedisUpdateHistory[_id].push(
-            UpdateInfo({aktor: msg.sender, timestamp: block.timestamp}) // Gunakan 'aktor' field
-        );
-
-        emit RekamMedisDiperbarui(
-            _id,
-            _diagnosa,
-            _catatan,
-            msg.sender,
-            block.timestamp
         );
     }
+
+    // Fungsi updateRekamMedis DIHAPUS (karena setiap perubahan adalah RM baru)
+    // Fungsi getRekamMedisVersions DIHAPUS
+    // Fungsi getRekamMedisUpdateHistory DIHAPUS
+    // Fungsi getFullRekamMedisHistory DIHAPUS (semua ini diganti oleh model 'RM baru')
 
     function getRekamMedisIdsByPasien(
         address _pasien
@@ -773,6 +642,7 @@ contract RekamMedisRS {
         return rekamMedisByPasien[_pasien];
     }
 
+    // Fungsi getRekamMedis disesuaikan dengan struct RekamMedisData yang baru
     function getRekamMedis(
         uint _id
     )
@@ -785,8 +655,9 @@ contract RekamMedisRS {
             string memory foto,
             string memory catatan,
             bool valid,
-            address pembuatAwal, // BARU
-            uint256 timestampAwal // BARU
+            address pembuat,
+            uint256 timestampPembuatan,
+            string memory tipeRekamMedis
         )
     {
         require(
@@ -801,34 +672,13 @@ contract RekamMedisRS {
             r.foto,
             r.catatan,
             r.valid,
-            r.pembuatAwal,
-            r.timestampAwal
+            r.pembuat,
+            r.timestampPembuatan,
+            r.tipeRekamMedis
         );
     }
 
-    function getRekamMedisVersions(
-        uint _id
-    ) external view returns (RekamMedisData[] memory) {
-        return rekamMedisVersions[_id];
-    }
-
-    function getRekamMedisUpdateHistory(
-        uint _id
-    )
-        external
-        view
-        returns (address[] memory actors, uint256[] memory timestamps)
-    {
-        uint len = rekamMedisUpdateHistory[_id].length;
-        actors = new address[](len);
-        timestamps = new uint256[](len);
-        for (uint i = 0; i < len; i++) {
-            actors[i] = rekamMedisUpdateHistory[_id][i].aktor; // Gunakan .aktor
-            timestamps[i] = rekamMedisUpdateHistory[_id][i].timestamp;
-        }
-        return (actors, timestamps);
-    }
-
+    // Fungsi nonaktifkanRekamMedis tetap sama, ia akan menonaktifkan RM spesifik
     function nonaktifkanRekamMedis(uint _id) external hanyaAdminRS {
         require(
             rekamMedis[_id].pasien != address(0),
@@ -840,10 +690,9 @@ contract RekamMedisRS {
             "Admin RS tidak berhak atas pasien ini."
         );
         rekamMedis[_id].valid = false;
-        // Pertimbangkan untuk emit event di sini jika diperlukan log nonaktifkan
     }
 
-    // --- Super Admin Functions ---
+    // --- Super Admin Functions (Tidak ada perubahan) ---
     function setSuperAdmin(address _newAdmin) external hanyaSuperAdmin {
         require(
             _newAdmin != address(0),
@@ -852,7 +701,7 @@ contract RekamMedisRS {
         superAdmin = _newAdmin;
     }
 
-    // --- Utility Functions ---
+    // --- Utility Functions (Tidak ada perubahan) ---
     function getUserRole(address _user) public view returns (string memory) {
         if (_user == superAdmin) return "SuperAdmin";
         if (dataAdmin[_user].aktif) return "AdminRS";
