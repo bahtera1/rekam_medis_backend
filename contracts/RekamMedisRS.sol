@@ -27,8 +27,10 @@ contract RekamMedisRS {
     mapping(address => bool) public isDokter;
     address[] public daftarDokter;
 
+    // Modifikasi struct Pasien: Tambah ID, hapus exists (isPasien mapping sudah cukup)
     struct Pasien {
         string nama;
+        string ID; // <--- ATRIBUT BARU: ID unik Pasien
         string golonganDarah;
         string tanggalLahir;
         string gender;
@@ -36,19 +38,21 @@ contract RekamMedisRS {
         string noTelepon;
         string email;
         address rumahSakitPenanggungJawab; // Alamat AdminRS penanggung jawab
-        bool exists;
+        // bool exists; // DIHAPUS: isPasien mapping sudah menangani ini
     }
     mapping(address => Pasien) public dataPasien;
     mapping(address => bool) public isPasien;
+    mapping(string => bool) public isPatientIDUsed; // <--- BARU: Untuk cek keunikan ID Pasien
     address[] public daftarPasien;
 
+    // Modifikasi struct RekamMedisData: Hapus 'valid'
     struct RekamMedisData {
         uint id;
         address pasien;
         string diagnosa;
         string foto;
         string catatan;
-        bool valid;
+        // bool valid; // <--- DIHAPUS
         address pembuat;
         uint256 timestampPembuatan;
         string tipeRekamMedis;
@@ -63,17 +67,16 @@ contract RekamMedisRS {
         string namaRumahSakit,
         string alamatRumahSakit,
         string kota,
-        string IDRS // Tambah IDRS ke event
+        string IDRS
     );
     event AdminRSStatusDiubah(address indexed admin, bool aktif);
 
-    // Event baru untuk update detail Admin RS
     event AdminRSInfoDiperbarui(
         address indexed admin,
         string namaRumahSakit,
         string alamatRumahSakit,
         string kota,
-        string IDRS // Tambah IDRS ke event update
+        string IDRS
     );
 
     event DokterTerdaftar(address indexed dokter, string nama, address adminRS);
@@ -85,7 +88,13 @@ contract RekamMedisRS {
         string nomorLisensi,
         address indexed adminRS
     );
-    event PasienTerdaftar(address indexed pasien, string nama, address adminRS);
+    // Modifikasi event PasienTerdaftar: Tambah ID pasien
+    event PasienTerdaftar(
+        address indexed pasien,
+        string nama,
+        string IDPasien,
+        address adminRS
+    ); // <--- IDPasien BARU
     event PasienPindahRS(
         address indexed pasien,
         address oldAdminRS,
@@ -94,6 +103,7 @@ contract RekamMedisRS {
     event PasienDiassignKeDokter(address dokter, address pasien);
     event PasienDiunassignDariDokter(address dokter, address pasien);
 
+    // Modifikasi event RekamMedisDitambahkan: Hapus 'valid'
     event RekamMedisDitambahkan(
         uint id,
         address pasien,
@@ -102,8 +112,8 @@ contract RekamMedisRS {
         string catatan,
         string tipeRekamMedis,
         address pembuat,
-        uint timestamp,
-        bool valid
+        uint timestamp
+        // bool valid // <--- DIHAPUS
     );
 
     event PasienDataDiperbarui(
@@ -132,7 +142,8 @@ contract RekamMedisRS {
 
     modifier hanyaAdminRS() {
         require(
-            dataAdmin[msg.sender].aktif,
+            bytes(dataAdmin[msg.sender].namaRumahSakit).length > 0 &&
+                dataAdmin[msg.sender].aktif, // Pastikan admin RS terdaftar dan aktif
             "Hanya admin RS yang aktif yang dapat menjalankan fungsi ini."
         );
         _;
@@ -151,7 +162,7 @@ contract RekamMedisRS {
             isDokter[msg.sender] && dataDokter[msg.sender].aktif,
             "Hanya dokter aktif."
         );
-        require(dataPasien[_pasien].exists, "Pasien tidak terdaftar.");
+        require(isPasien[_pasien], "Pasien tidak terdaftar."); // Ganti: Cek pasien exist via isPasien mapping
         require(
             dataDokter[msg.sender].adminRS ==
                 dataPasien[_pasien].rumahSakitPenanggungJawab,
@@ -183,19 +194,21 @@ contract RekamMedisRS {
 
     // --- Admin RS Functions ---
 
-    // Fungsi registerAdminRS: Tambah Admin RS baru
     function registerAdminRS(
         address _admin,
         string calldata _namaRS,
         string calldata _alamatRS,
         string calldata _kotaRS,
-        string calldata _IDRS // Parameter: IDRS
+        string calldata _IDRS
     ) external hanyaSuperAdmin {
         require(
             bytes(dataAdmin[_admin].namaRumahSakit).length == 0,
             "Admin RS sudah terdaftar dengan alamat ini."
         );
-        require(bytes(_namaRS).length > 0, "Nama Rumah Sakit tidak boleh kosong.");
+        require(
+            bytes(_namaRS).length > 0,
+            "Nama Rumah Sakit tidak boleh kosong."
+        );
         require(bytes(_IDRS).length > 0, "IDRS tidak boleh kosong.");
         require(!isIDRSUsed[_IDRS], "IDRS sudah digunakan oleh Admin RS lain.");
 
@@ -212,27 +225,36 @@ contract RekamMedisRS {
         emit AdminRSTerdaftar(_admin, _namaRS, _alamatRS, _kotaRS, _IDRS);
     }
 
-    // Fungsi updateAdminRSDetails: Update detail informasi Admin RS (oleh Super Admin)
     function updateAdminRSDetails(
         address _admin,
         string calldata _namaBaru,
         string calldata _alamatBaru,
         string calldata _kotaBaru,
-        string calldata _IDRSBaru // Parameter: IDRS baru
+        string calldata _IDRSBaru
     ) external hanyaSuperAdmin {
-        require(bytes(dataAdmin[_admin].namaRumahSakit).length != 0, "Admin RS tidak ditemukan.");
-        require(bytes(_namaBaru).length > 0, "Nama Rumah Sakit baru tidak boleh kosong.");
+        require(
+            bytes(dataAdmin[_admin].namaRumahSakit).length != 0,
+            "Admin RS tidak ditemukan."
+        );
+        require(
+            bytes(_namaBaru).length > 0,
+            "Nama Rumah Sakit baru tidak boleh kosong."
+        );
         require(bytes(_IDRSBaru).length > 0, "IDRS baru tidak boleh kosong.");
-        
-        // Cek jika IDRS berubah
-        if (keccak256(abi.encodePacked(dataAdmin[_admin].IDRS)) != keccak256(abi.encodePacked(_IDRSBaru))) {
-            require(!isIDRSUsed[_IDRSBaru], "IDRS baru sudah digunakan oleh Admin RS lain.");
+
+        if (
+            keccak256(abi.encodePacked(dataAdmin[_admin].IDRS)) !=
+            keccak256(abi.encodePacked(_IDRSBaru))
+        ) {
+            require(
+                !isIDRSUsed[_IDRSBaru],
+                "IDRS baru sudah digunakan oleh Admin RS lain."
+            );
             if (bytes(dataAdmin[_admin].IDRS).length > 0) {
-                 isIDRSUsed[dataAdmin[_admin].IDRS] = false; 
+                isIDRSUsed[dataAdmin[_admin].IDRS] = false;
             }
             isIDRSUsed[_IDRSBaru] = true;
         }
-
 
         AdminRS storage adminToUpdate = dataAdmin[_admin];
         adminToUpdate.namaRumahSakit = _namaBaru;
@@ -240,11 +262,15 @@ contract RekamMedisRS {
         adminToUpdate.kota = _kotaBaru;
         adminToUpdate.IDRS = _IDRSBaru;
 
-        emit AdminRSInfoDiperbarui(_admin, _namaBaru, _alamatBaru, _kotaBaru, _IDRSBaru);
+        emit AdminRSInfoDiperbarui(
+            _admin,
+            _namaBaru,
+            _alamatBaru,
+            _kotaBaru,
+            _IDRSBaru
+        );
     }
 
-
-    // Fungsi setStatusAdminRS: Mengubah status aktif/non-aktif Admin RS (oleh Super Admin)
     function setStatusAdminRS(
         address _admin,
         bool _aktif
@@ -270,7 +296,6 @@ contract RekamMedisRS {
         return daftarAdmin[idx];
     }
 
-    // Fungsi getAdminRS: Mengambil semua detail Admin RS
     function getAdminRS(
         address _admin
     )
@@ -284,7 +309,10 @@ contract RekamMedisRS {
             string memory IDRS
         )
     {
-        require(bytes(dataAdmin[_admin].namaRumahSakit).length > 0, "Admin RS tidak ditemukan.");
+        require(
+            bytes(dataAdmin[_admin].namaRumahSakit).length > 0,
+            "Admin RS tidak ditemukan."
+        );
         AdminRS storage adminData = dataAdmin[_admin];
         return (
             adminData.namaRumahSakit,
@@ -405,9 +433,12 @@ contract RekamMedisRS {
     }
 
     // --- Pasien Functions ---
+
+    // Modifikasi registerPasien: Tambah ID pasien
     function registerPasien(
         address _pasien,
         string calldata _nama,
+        string calldata _IDPasien, // <--- PARAMETER BARU: ID Pasien
         address _adminRS
     ) external hanyaAdminRS {
         require(
@@ -418,6 +449,9 @@ contract RekamMedisRS {
             !isDokter[_pasien],
             "Alamat ini terdaftar sebagai dokter, tidak bisa menjadi pasien."
         );
+        require(bytes(_IDPasien).length > 0, "ID Pasien tidak boleh kosong.");
+        require(!isPatientIDUsed[_IDPasien], "ID Pasien sudah digunakan.");
+
         require(
             dataAdmin[_adminRS].aktif,
             "Admin RS yang dirujuk tidak aktif."
@@ -430,21 +464,24 @@ contract RekamMedisRS {
         isPasien[_pasien] = true;
         dataPasien[_pasien] = Pasien({
             nama: _nama,
+            ID: _IDPasien,
             golonganDarah: "",
             tanggalLahir: "",
             gender: "",
             alamat: "",
             noTelepon: "",
             email: "",
-            rumahSakitPenanggungJawab: _adminRS,
-            exists: true
+            rumahSakitPenanggungJawab: _adminRS
         });
         daftarPasien.push(_pasien);
-        emit PasienTerdaftar(_pasien, _nama, _adminRS);
+        isPatientIDUsed[_IDPasien] = true;
+        emit PasienTerdaftar(_pasien, _nama, _IDPasien, _adminRS);
     }
 
+    // Modifikasi selfRegisterPasien: Tambah ID pasien
     function selfRegisterPasien(
         string calldata _nama,
+        string calldata _IDPasien, // <--- PARAMETER BARU: ID Pasien
         string calldata _golonganDarah,
         string calldata _tanggalLahir,
         string calldata _gender,
@@ -455,6 +492,8 @@ contract RekamMedisRS {
     ) external {
         require(!isPasien[msg.sender], "Anda sudah terdaftar sebagai pasien.");
         require(!isDokter[msg.sender], "Alamat ini terdaftar sebagai dokter.");
+        require(bytes(_IDPasien).length > 0, "ID Pasien tidak boleh kosong.");
+        require(!isPatientIDUsed[_IDPasien], "ID Pasien sudah digunakan.");
         require(
             dataAdmin[_adminRS].aktif,
             "Rumah Sakit yang dipilih tidak aktif atau tidak valid."
@@ -463,17 +502,18 @@ contract RekamMedisRS {
         isPasien[msg.sender] = true;
         dataPasien[msg.sender] = Pasien({
             nama: _nama,
+            ID: _IDPasien,
             golonganDarah: _golonganDarah,
             tanggalLahir: _tanggalLahir,
             gender: _gender,
             alamat: _alamat,
             noTelepon: _noTelepon,
             email: _email,
-            rumahSakitPenanggungJawab: _adminRS,
-            exists: true
+            rumahSakitPenanggungJawab: _adminRS
         });
         daftarPasien.push(msg.sender);
-        emit PasienTerdaftar(msg.sender, _nama, _adminRS);
+        isPatientIDUsed[_IDPasien] = true;
+        emit PasienTerdaftar(msg.sender, _nama, _IDPasien, _adminRS);
     }
 
     function updatePasienData(
@@ -485,10 +525,7 @@ contract RekamMedisRS {
         string calldata _noTelepon,
         string calldata _email
     ) external hanyaPasien(msg.sender) {
-        require(
-            dataPasien[msg.sender].exists,
-            "Data pasien Anda tidak ditemukan."
-        );
+        require(isPasien[msg.sender], "Pasien tidak ditemukan."); // Ganti: Cek pasien exist via isPasien mapping
 
         Pasien storage pasienToUpdate = dataPasien[msg.sender];
         pasienToUpdate.nama = _nama;
@@ -514,10 +551,7 @@ contract RekamMedisRS {
     function updatePasienRumahSakit(
         address _newAdminRS
     ) external hanyaPasien(msg.sender) {
-        require(
-            dataPasien[msg.sender].exists,
-            "Data pasien Anda tidak ditemukan."
-        );
+        require(isPasien[msg.sender], "Pasien tidak ditemukan."); // Ganti: Cek pasien exist via isPasien mapping
         require(
             dataAdmin[_newAdminRS].aktif,
             "Rumah Sakit baru tidak aktif atau tidak valid."
@@ -537,6 +571,7 @@ contract RekamMedisRS {
         return daftarPasien;
     }
 
+    // Modifikasi getPasienData: Mengembalikan ID pasien
     function getPasienData(
         address _pasien
     )
@@ -544,6 +579,7 @@ contract RekamMedisRS {
         view
         returns (
             string memory nama,
+            string memory ID, // <--- BARU: return ID
             string memory golonganDarah,
             string memory tanggalLahir,
             string memory gender,
@@ -557,6 +593,7 @@ contract RekamMedisRS {
         Pasien storage p = dataPasien[_pasien];
         return (
             p.nama,
+            p.ID, // <--- Return ID
             p.golonganDarah,
             p.tanggalLahir,
             p.gender,
@@ -576,22 +613,23 @@ contract RekamMedisRS {
             dataDokter[_dokter].adminRS == msg.sender,
             "Dokter ini tidak terdaftar di rumah sakit Anda."
         );
-        require(isPasien[_pasien], "Pasien tidak terdaftar.");
+        require(isPasien[_pasien], "Pasien tidak terdaftar."); // Ganti: Cek pasien exist via isPasien mapping
 
         require(
-            dataPasien[_pasien].rumahSakitPenanggungJawab == msg.sender ||
-            dataPasien[_pasien].rumahSakitPenanggungJawab == address(0),
+            // Cek apakah pasien ini adalah tanggung jawab RS admin yang login, atau belum punya RS penanggung jawab
+            (dataPasien[_pasien].rumahSakitPenanggungJawab == msg.sender ||
+                dataPasien[_pasien].rumahSakitPenanggungJawab == address(0)),
             "Pasien ini tidak terdaftar di rumah sakit Anda atau sudah di-assign ke RS lain."
         );
 
+        // Jika pasien belum punya RS penanggung jawab, assign sekarang
         if (dataPasien[_pasien].rumahSakitPenanggungJawab == address(0)) {
             dataPasien[_pasien].rumahSakitPenanggungJawab = msg.sender;
         }
 
         bool alreadyAssigned = false;
-        address[] storage listPasienDitugaskan = dataDokter[
-            _dokter
-        ].assignedPasien;
+        address[] storage listPasienDitugaskan = dataDokter[_dokter]
+            .assignedPasien;
         for (uint i = 0; i < listPasienDitugaskan.length; i++) {
             if (listPasienDitugaskan[i] == _pasien) {
                 alreadyAssigned = true;
@@ -623,9 +661,8 @@ contract RekamMedisRS {
         );
 
         bool found = false;
-        address[] storage listPasienDitugaskan = dataDokter[
-            _dokter
-        ].assignedPasien;
+        address[] storage listPasienDitugaskan = dataDokter[_dokter]
+            .assignedPasien;
         for (uint i = 0; i < listPasienDitugaskan.length; i++) {
             if (listPasienDitugaskan[i] == _pasien) {
                 listPasienDitugaskan[i] = listPasienDitugaskan[
@@ -666,7 +703,8 @@ contract RekamMedisRS {
             isValidActor = true;
         } else if (isDokter[msg.sender] && dataDokter[msg.sender].aktif) {
             if (
-                dataPasien[_pasien].exists &&
+                // Pastikan pasien terdaftar dan dokter berhak di RS yang sama dan ditugaskan
+                isPasien[_pasien] &&
                 dataDokter[msg.sender].adminRS ==
                 dataPasien[_pasien].rumahSakitPenanggungJawab &&
                 isAssigned(msg.sender, _pasien)
@@ -678,7 +716,7 @@ contract RekamMedisRS {
             isValidActor,
             "Aktor tidak berhak menambah rekam medis untuk pasien ini."
         );
-        require(dataPasien[_pasien].exists, "Pasien tidak terdaftar.");
+        require(isPasien[_pasien], "Pasien tidak terdaftar."); // Cek pasien exist via isPasien mapping
 
         rekamMedisCount++;
         uint newId = rekamMedisCount;
@@ -688,7 +726,6 @@ contract RekamMedisRS {
             diagnosa: _diagnosa,
             foto: _foto,
             catatan: _catatan,
-            valid: true,
             pembuat: msg.sender,
             timestampPembuatan: block.timestamp,
             tipeRekamMedis: _tipeRekamMedis
@@ -703,8 +740,7 @@ contract RekamMedisRS {
             _catatan,
             _tipeRekamMedis,
             msg.sender,
-            block.timestamp,
-            true
+            block.timestamp
         );
     }
 
@@ -715,6 +751,7 @@ contract RekamMedisRS {
         return rekamMedisByPasien[_pasien];
     }
 
+    // Modifikasi getRekamMedis: Hapus 'valid' dari return
     function getRekamMedis(
         uint _id
     )
@@ -726,7 +763,7 @@ contract RekamMedisRS {
             string memory diagnosa,
             string memory foto,
             string memory catatan,
-            bool valid,
+            // bool valid, // <--- DIHAPUS
             address pembuat,
             uint256 timestampPembuatan,
             string memory tipeRekamMedis
@@ -743,25 +780,14 @@ contract RekamMedisRS {
             r.diagnosa,
             r.foto,
             r.catatan,
-            r.valid,
+            // r.valid, // <--- DIHAPUS
             r.pembuat,
             r.timestampPembuatan,
             r.tipeRekamMedis
         );
     }
 
-    function nonaktifkanRekamMedis(uint _id) external hanyaAdminRS {
-        require(
-            rekamMedis[_id].pasien != address(0),
-            "Rekam medis tidak ditemukan."
-        );
-        require(
-            dataPasien[rekamMedis[_id].pasien].rumahSakitPenanggungJawab ==
-                msg.sender,
-            "Admin RS tidak berhak atas pasien ini."
-        );
-        rekamMedis[_id].valid = false;
-    }
+    // FUNGSI NONAKTIFKAN REKAM MEDIS DIHAPUS KARENA ATRIBUT VALID DIHAPUS
 
     // --- Super Admin Functions ---
     function setSuperAdmin(address _newAdmin) external hanyaSuperAdmin {
@@ -775,7 +801,7 @@ contract RekamMedisRS {
     // MODIFIKASI: Fungsi getUserRole untuk AdminRS dan Dokter non-aktif
     function getUserRole(address _user) public view returns (string memory) {
         if (_user == superAdmin) return "SuperAdmin";
-        
+
         // Cek apakah user adalah AdminRS TERDAFTAR terlebih dahulu
         if (bytes(dataAdmin[_user].namaRumahSakit).length > 0) {
             if (dataAdmin[_user].aktif) {
@@ -784,19 +810,19 @@ contract RekamMedisRS {
                 return "InactiveAdminRS"; // Admin RS Terdaftar tapi Non-aktif
             }
         }
-        
+
         // Cek apakah user adalah Dokter TERDAFTAR
-        if (isDokter[_user]) { 
+        if (isDokter[_user]) {
             if (dataDokter[_user].aktif) {
                 return "Dokter"; // Dokter Aktif
             } else {
                 return "InactiveDokter"; // Dokter Terdaftar tapi Non-aktif
             }
         }
-        
+
         // Kemudian cek role Pasien (Pasien dianggap selalu 'aktif' untuk validitas loginnya)
         if (isPasien[_user]) return "Pasien";
-        
+
         return "Unknown"; // Role tidak dikenal
     }
 }
