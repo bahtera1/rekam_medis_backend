@@ -128,7 +128,7 @@ contract RekamMedisRS {
     );
 
     constructor() {
-        superAdmin = 0xB0dC0Bf642d339517438017Fc185Bb0f758A01D2; // << GANTI DENGAN ALAMAT SUPER ADMIN ANDA >>
+        superAdmin = 0xB0dC0Bf642d339517438017Fc185Bb0f758A01D2;
     }
 
     // Modifier
