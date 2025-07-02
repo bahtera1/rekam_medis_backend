@@ -558,6 +558,10 @@ contract RekamMedisRS {
         return daftarPasien;
     }
 
+    function totalPasien() public view returns (uint) {
+        return daftarPasien.length;
+    }
+
     function getPasienData(
         address _pasien
     )
