@@ -215,7 +215,10 @@ contract RekamMedisRS {
         string calldata _kotaBaru,
         string calldata _NIBRSBaru
     ) external hanyaAdminRS {
-        require(msg.sender == _admin, "Anda hanya bisa memperbarui detail rumah sakit Anda sendiri.");
+        require(
+            msg.sender == _admin,
+            "Anda hanya bisa memperbarui detail rumah sakit Anda sendiri."
+        );
 
         require(
             bytes(dataAdmin[_admin].namaRumahSakit).length != 0,
@@ -256,11 +259,9 @@ contract RekamMedisRS {
         );
     }
 
-    // Fungsi setStatusAdminRS yang sudah diperbaiki
-    function setStatusAdminRS(
-        address _admin,
-        bool _aktif
-    ) external hanyaAdminRS { // <-- Sudah benar di sini
+    function setStatusAdminRS(address _admin, bool _aktif) external {
+        // <-- HAPUS `hanyaAdminRS` dari sini
+        // Pemeriksaan dilakukan di dalam, memastikan hanya pemilik akun yang bisa mengubah statusnya sendiri
         require(
             msg.sender == _admin,
             "Anda hanya bisa mengubah status Anda sendiri."
@@ -272,7 +273,6 @@ contract RekamMedisRS {
         dataAdmin[_admin].aktif = _aktif;
         emit AdminRSStatusDiubah(_admin, _aktif);
     }
-
 
     function getAllAdminRSAddresses() external view returns (address[] memory) {
         return daftarAdmin;
@@ -769,6 +769,36 @@ contract RekamMedisRS {
         );
     }
 
+    function getRekamMedisByPasienUntukAdminRS(
+        address _pasien
+    ) external view hanyaAdminRS returns (RekamMedisData[] memory) {
+        // 1. Verifikasi Berewenang
+        // Memastikan AdminRS yang memanggil fungsi ini adalah RS penanggung jawab pasien.
+        require(
+            dataPasien[_pasien].rumahSakitPenanggungJawab == msg.sender,
+            "Anda tidak berhak melihat rekam medis pasien ini."
+        );
+
+        // 2. Ambil ID Rekam Medis
+        // Mengambil semua ID rekam medis yang dimiliki oleh pasien.
+        uint[] storage recordIds = rekamMedisByPasien[_pasien];
+
+        // 3. Siapkan Array untuk Hasil
+        // Membuat array di memori untuk menampung data rekam medis lengkap.
+        RekamMedisData[] memory records = new RekamMedisData[](
+            recordIds.length
+        );
+
+        // 4. Kumpulkan Data Lengkap
+        // Looping melalui setiap ID, ambil datanya dari mapping `rekamMedis`, dan masukkan ke array hasil.
+        for (uint i = 0; i < recordIds.length; i++) {
+            records[i] = rekamMedis[recordIds[i]];
+        }
+
+        // 5. Kembalikan Hasil
+        return records;
+    }
+
     function getUserRole(address _user) public view returns (string memory) {
         if (bytes(dataAdmin[_user].namaRumahSakit).length > 0) {
             if (dataAdmin[_user].aktif) {
@@ -791,11 +821,19 @@ contract RekamMedisRS {
         return "Unknown";
     }
 
-    function getPasienByAdminRS() external view hanyaAdminRS returns (address[] memory) {
+    function getPasienByAdminRS()
+        external
+        view
+        hanyaAdminRS
+        returns (address[] memory)
+    {
         address[] memory pasienDiRS;
         uint count = 0;
         for (uint i = 0; i < daftarPasien.length; i++) {
-            if (dataPasien[daftarPasien[i]].rumahSakitPenanggungJawab == msg.sender) {
+            if (
+                dataPasien[daftarPasien[i]].rumahSakitPenanggungJawab ==
+                msg.sender
+            ) {
                 count++;
             }
         }
@@ -803,7 +841,10 @@ contract RekamMedisRS {
         pasienDiRS = new address[](count);
         uint currentIndex = 0;
         for (uint i = 0; i < daftarPasien.length; i++) {
-            if (dataPasien[daftarPasien[i]].rumahSakitPenanggungJawab == msg.sender) {
+            if (
+                dataPasien[daftarPasien[i]].rumahSakitPenanggungJawab ==
+                msg.sender
+            ) {
                 pasienDiRS[currentIndex] = daftarPasien[i];
                 currentIndex++;
             }
