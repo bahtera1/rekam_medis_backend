@@ -2,8 +2,6 @@
 pragma solidity ^0.8.0;
 
 contract RekamMedisRS {
-    address public superAdmin;
-
     struct AdminRS {
         string namaRumahSakit;
         bool aktif;
@@ -120,15 +118,41 @@ contract RekamMedisRS {
     );
 
     constructor() {
-        superAdmin = 0xB0dC0Bf642d339517438017Fc185Bb0f758A01D2;
-    }
+        // Tambahkan Admin RS pertama
+        address admin1 = 0x153f67a7B7169Ce3F13F8A81DC9CAe0bC27dbf21;
+        string memory namaRS1 = "RS Siloam Malang";
+        string memory alamatRS1 = "Jl. Raya Langsep No. 2, Malang";
+        string memory kotaRS1 = "Malang";
+        string memory NIBRS1 = "NIBRS-SM001";
 
-    modifier hanyaSuperAdmin() {
-        require(
-            msg.sender == superAdmin,
-            "Hanya super admin yang dapat menjalankan fungsi ini."
-        );
-        _;
+        dataAdmin[admin1] = AdminRS({
+            namaRumahSakit: namaRS1,
+            aktif: true,
+            alamatRumahSakit: alamatRS1,
+            kota: kotaRS1,
+            NIBRS: NIBRS1
+        });
+        daftarAdmin.push(admin1);
+        isNIBRSUsed[NIBRS1] = true;
+        emit AdminRSTerdaftar(admin1, namaRS1, alamatRS1, kotaRS1, NIBRS1);
+
+        // Tambahkan Admin RS kedua
+        address admin2 = 0xd95A4eE9149fcb31C535eF6CbD65f4c23d9f7997;
+        string memory namaRS2 = "RS Siloam Yogya";
+        string memory alamatRS2 = "Jl. Laksda Adisucipto No. 32, Yogyakarta";
+        string memory kotaRS2 = "Yogyakarta";
+        string memory NIBRS2 = "NIBRS-SY001";
+
+        dataAdmin[admin2] = AdminRS({
+            namaRumahSakit: namaRS2,
+            aktif: true,
+            alamatRumahSakit: alamatRS2,
+            kota: kotaRS2,
+            NIBRS: NIBRS2
+        });
+        daftarAdmin.push(admin2);
+        isNIBRSUsed[NIBRS2] = true;
+        emit AdminRSTerdaftar(admin2, namaRS2, alamatRS2, kotaRS2, NIBRS2);
     }
 
     modifier hanyaAdminRS() {
@@ -183,47 +207,16 @@ contract RekamMedisRS {
         _;
     }
 
-    function registerAdminRS(
-        address _admin,
-        string calldata _namaRS,
-        string calldata _alamatRS,
-        string calldata _kotaRS,
-        string calldata _NIBRS
-    ) external hanyaSuperAdmin {
-        require(
-            bytes(dataAdmin[_admin].namaRumahSakit).length == 0,
-            "Admin RS sudah terdaftar dengan alamat ini."
-        );
-        require(
-            bytes(_namaRS).length > 0,
-            "Nama Rumah Sakit tidak boleh kosong."
-        );
-        require(bytes(_NIBRS).length > 0, "NIBRS tidak boleh kosong.");
-        require(
-            !isNIBRSUsed[_NIBRS],
-            "NIBRS sudah digunakan oleh Admin RS lain."
-        );
-
-        dataAdmin[_admin] = AdminRS({
-            namaRumahSakit: _namaRS,
-            aktif: true,
-            alamatRumahSakit: _alamatRS,
-            kota: _kotaRS,
-            NIBRS: _NIBRS
-        });
-        daftarAdmin.push(_admin);
-        isNIBRSUsed[_NIBRS] = true;
-
-        emit AdminRSTerdaftar(_admin, _namaRS, _alamatRS, _kotaRS, _NIBRS);
-    }
-
+    // Fungsi updateAdminRSDetails agar Admin RS bisa memperbarui detailnya sendiri
     function updateAdminRSDetails(
         address _admin,
         string calldata _namaBaru,
         string calldata _alamatBaru,
         string calldata _kotaBaru,
         string calldata _NIBRSBaru
-    ) external hanyaSuperAdmin {
+    ) external hanyaAdminRS {
+        require(msg.sender == _admin, "Anda hanya bisa memperbarui detail rumah sakit Anda sendiri.");
+
         require(
             bytes(dataAdmin[_admin].namaRumahSakit).length != 0,
             "Admin RS tidak ditemukan."
@@ -263,10 +256,15 @@ contract RekamMedisRS {
         );
     }
 
+    // Fungsi setStatusAdminRS yang sudah diperbaiki
     function setStatusAdminRS(
         address _admin,
         bool _aktif
-    ) external hanyaSuperAdmin {
+    ) external hanyaAdminRS { // <-- Sudah benar di sini
+        require(
+            msg.sender == _admin,
+            "Anda hanya bisa mengubah status Anda sendiri."
+        );
         require(
             bytes(dataAdmin[_admin].namaRumahSakit).length != 0,
             "Admin RS tidak ditemukan."
@@ -274,6 +272,7 @@ contract RekamMedisRS {
         dataAdmin[_admin].aktif = _aktif;
         emit AdminRSStatusDiubah(_admin, _aktif);
     }
+
 
     function getAllAdminRSAddresses() external view returns (address[] memory) {
         return daftarAdmin;
@@ -770,17 +769,7 @@ contract RekamMedisRS {
         );
     }
 
-    function setSuperAdmin(address _newAdmin) external hanyaSuperAdmin {
-        require(
-            _newAdmin != address(0),
-            "Alamat super admin baru tidak valid."
-        );
-        superAdmin = _newAdmin;
-    }
-
     function getUserRole(address _user) public view returns (string memory) {
-        if (_user == superAdmin) return "SuperAdmin";
-
         if (bytes(dataAdmin[_user].namaRumahSakit).length > 0) {
             if (dataAdmin[_user].aktif) {
                 return "AdminRS";
@@ -801,5 +790,24 @@ contract RekamMedisRS {
 
         return "Unknown";
     }
+
+    function getPasienByAdminRS() external view hanyaAdminRS returns (address[] memory) {
+        address[] memory pasienDiRS;
+        uint count = 0;
+        for (uint i = 0; i < daftarPasien.length; i++) {
+            if (dataPasien[daftarPasien[i]].rumahSakitPenanggungJawab == msg.sender) {
+                count++;
+            }
+        }
+
+        pasienDiRS = new address[](count);
+        uint currentIndex = 0;
+        for (uint i = 0; i < daftarPasien.length; i++) {
+            if (dataPasien[daftarPasien[i]].rumahSakitPenanggungJawab == msg.sender) {
+                pasienDiRS[currentIndex] = daftarPasien[i];
+                currentIndex++;
+            }
+        }
+        return pasienDiRS;
+    }
 }
-//cekpoin//
