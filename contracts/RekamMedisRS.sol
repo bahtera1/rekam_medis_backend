@@ -28,6 +28,7 @@ contract RekamMedisRS {
     struct Pasien {
         string nama;
         string ID;
+        string NIK;
         string golonganDarah;
         string tanggalLahir;
         string gender;
@@ -39,6 +40,7 @@ contract RekamMedisRS {
     mapping(address => Pasien) public dataPasien;
     mapping(address => bool) public isPasien;
     mapping(string => bool) public isPatientIDUsed;
+    mapping(string => bool) public isPatientNIKUsed;
     address[] public daftarPasien;
 
     struct RekamMedisData {
@@ -62,15 +64,15 @@ contract RekamMedisRS {
         string kota,
         string NIBRS
     );
-    event AdminRSStatusDiubah(address indexed admin, bool aktif);
+    // event AdminRSStatusDiubah(address indexed admin, bool aktif); // Dihapus sebelumnya
 
-    event AdminRSInfoDiperbarui(
-        address indexed admin,
-        string namaRumahSakit,
-        string alamatRumahSakit,
-        string kota,
-        string NIBRS
-    );
+    // event AdminRSInfoDiperbarui( // <-- Dihapus
+    //     address indexed admin,
+    //     string namaRumahSakit,
+    //     string alamatRumahSakit,
+    //     string kota,
+    //     string NIBRS
+    // );
 
     event DokterTerdaftar(address indexed dokter, string nama, address adminRS);
     event DokterStatusDiubah(address indexed dokter, bool aktif);
@@ -85,6 +87,7 @@ contract RekamMedisRS {
         address indexed pasien,
         string nama,
         string IDPasien,
+        string NIKPasien,
         address adminRS
     );
     event PasienPindahRS(
@@ -109,6 +112,7 @@ contract RekamMedisRS {
     event PasienDataDiperbarui(
         address indexed pasien,
         string nama,
+        string NIK,
         string golonganDarah,
         string tanggalLahir,
         string gender,
@@ -207,72 +211,7 @@ contract RekamMedisRS {
         _;
     }
 
-    // Fungsi updateAdminRSDetails agar Admin RS bisa memperbarui detailnya sendiri
-    function updateAdminRSDetails(
-        address _admin,
-        string calldata _namaBaru,
-        string calldata _alamatBaru,
-        string calldata _kotaBaru,
-        string calldata _NIBRSBaru
-    ) external hanyaAdminRS {
-        require(
-            msg.sender == _admin,
-            "Anda hanya bisa memperbarui detail rumah sakit Anda sendiri."
-        );
-
-        require(
-            bytes(dataAdmin[_admin].namaRumahSakit).length != 0,
-            "Admin RS tidak ditemukan."
-        );
-        require(
-            bytes(_namaBaru).length > 0,
-            "Nama Rumah Sakit baru tidak boleh kosong."
-        );
-        require(bytes(_NIBRSBaru).length > 0, "NIBRS baru tidak boleh kosong.");
-
-        if (
-            keccak256(abi.encodePacked(dataAdmin[_admin].NIBRS)) !=
-            keccak256(abi.encodePacked(_NIBRSBaru))
-        ) {
-            require(
-                !isNIBRSUsed[_NIBRSBaru],
-                "NIBRS baru sudah digunakan oleh Admin RS lain."
-            );
-            if (bytes(dataAdmin[_admin].NIBRS).length > 0) {
-                isNIBRSUsed[dataAdmin[_admin].NIBRS] = false;
-            }
-            isNIBRSUsed[_NIBRSBaru] = true;
-        }
-
-        AdminRS storage adminToUpdate = dataAdmin[_admin];
-        adminToUpdate.namaRumahSakit = _namaBaru;
-        adminToUpdate.alamatRumahSakit = _alamatBaru;
-        adminToUpdate.kota = _kotaBaru;
-        adminToUpdate.NIBRS = _NIBRSBaru;
-
-        emit AdminRSInfoDiperbarui(
-            _admin,
-            _namaBaru,
-            _alamatBaru,
-            _kotaBaru,
-            _NIBRSBaru
-        );
-    }
-
-    function setStatusAdminRS(address _admin, bool _aktif) external {
-        // <-- HAPUS `hanyaAdminRS` dari sini
-        // Pemeriksaan dilakukan di dalam, memastikan hanya pemilik akun yang bisa mengubah statusnya sendiri
-        require(
-            msg.sender == _admin,
-            "Anda hanya bisa mengubah status Anda sendiri."
-        );
-        require(
-            bytes(dataAdmin[_admin].namaRumahSakit).length != 0,
-            "Admin RS tidak ditemukan."
-        );
-        dataAdmin[_admin].aktif = _aktif;
-        emit AdminRSStatusDiubah(_admin, _aktif);
-    }
+    // Fungsi updateAdminRSDetails telah dihapus sepenuhnya
 
     function getAllAdminRSAddresses() external view returns (address[] memory) {
         return daftarAdmin;
@@ -426,6 +365,7 @@ contract RekamMedisRS {
         address _pasien,
         string calldata _nama,
         string calldata _IDPasien,
+        string calldata _NIKPasien,
         address _adminRS
     ) external hanyaAdminRS {
         require(
@@ -438,6 +378,8 @@ contract RekamMedisRS {
         );
         require(bytes(_IDPasien).length > 0, "ID Pasien tidak boleh kosong.");
         require(!isPatientIDUsed[_IDPasien], "ID Pasien sudah digunakan.");
+        require(bytes(_NIKPasien).length > 0, "NIK Pasien tidak boleh kosong.");
+        require(!isPatientNIKUsed[_NIKPasien], "NIK Pasien sudah digunakan.");
 
         require(
             dataAdmin[_adminRS].aktif,
@@ -452,6 +394,7 @@ contract RekamMedisRS {
         dataPasien[_pasien] = Pasien({
             nama: _nama,
             ID: _IDPasien,
+            NIK: _NIKPasien,
             golonganDarah: "",
             tanggalLahir: "",
             gender: "",
@@ -462,12 +405,14 @@ contract RekamMedisRS {
         });
         daftarPasien.push(_pasien);
         isPatientIDUsed[_IDPasien] = true;
-        emit PasienTerdaftar(_pasien, _nama, _IDPasien, _adminRS);
+        isPatientNIKUsed[_NIKPasien] = true;
+        emit PasienTerdaftar(_pasien, _nama, _IDPasien, _NIKPasien, _adminRS);
     }
 
     function selfRegisterPasien(
         string calldata _nama,
         string calldata _IDPasien,
+        string calldata _NIKPasien,
         string calldata _golonganDarah,
         string calldata _tanggalLahir,
         string calldata _gender,
@@ -480,6 +425,8 @@ contract RekamMedisRS {
         require(!isDokter[msg.sender], "Alamat ini terdaftar sebagai dokter.");
         require(bytes(_IDPasien).length > 0, "ID Pasien tidak boleh kosong.");
         require(!isPatientIDUsed[_IDPasien], "ID Pasien sudah digunakan.");
+        require(bytes(_NIKPasien).length > 0, "NIK Pasien tidak boleh kosong.");
+        require(!isPatientNIKUsed[_NIKPasien], "NIK Pasien sudah digunakan.");
         require(
             dataAdmin[_adminRS].aktif,
             "Rumah Sakit yang dipilih tidak aktif atau tidak valid."
@@ -489,6 +436,7 @@ contract RekamMedisRS {
         dataPasien[msg.sender] = Pasien({
             nama: _nama,
             ID: _IDPasien,
+            NIK: _NIKPasien,
             golonganDarah: _golonganDarah,
             tanggalLahir: _tanggalLahir,
             gender: _gender,
@@ -499,11 +447,13 @@ contract RekamMedisRS {
         });
         daftarPasien.push(msg.sender);
         isPatientIDUsed[_IDPasien] = true;
-        emit PasienTerdaftar(msg.sender, _nama, _IDPasien, _adminRS);
+        isPatientNIKUsed[_NIKPasien] = true;
+        emit PasienTerdaftar(msg.sender, _nama, _IDPasien, _NIKPasien, _adminRS);
     }
 
     function updatePasienData(
         string calldata _nama,
+        string calldata _NIK,
         string calldata _golonganDarah,
         string calldata _tanggalLahir,
         string calldata _gender,
@@ -513,8 +463,20 @@ contract RekamMedisRS {
     ) external hanyaPasien(msg.sender) {
         require(isPasien[msg.sender], "Pasien tidak ditemukan.");
 
+        // Validasi NIK baru jika ada perubahan
+        if (keccak256(abi.encodePacked(dataPasien[msg.sender].NIK)) != keccak256(abi.encodePacked(_NIK))) {
+            require(bytes(_NIK).length > 0, "NIK Pasien tidak boleh kosong.");
+            require(!isPatientNIKUsed[_NIK], "NIK baru sudah digunakan oleh pasien lain.");
+            // Nonaktifkan NIK lama (jika ada) dan aktifkan NIK baru
+            if (bytes(dataPasien[msg.sender].NIK).length > 0) {
+                isPatientNIKUsed[dataPasien[msg.sender].NIK] = false;
+            }
+            isPatientNIKUsed[_NIK] = true;
+        }
+
         Pasien storage pasienToUpdate = dataPasien[msg.sender];
         pasienToUpdate.nama = _nama;
+        pasienToUpdate.NIK = _NIK;
         pasienToUpdate.golonganDarah = _golonganDarah;
         pasienToUpdate.tanggalLahir = _tanggalLahir;
         pasienToUpdate.gender = _gender;
@@ -525,6 +487,7 @@ contract RekamMedisRS {
         emit PasienDataDiperbarui(
             msg.sender,
             _nama,
+            _NIK,
             _golonganDarah,
             _tanggalLahir,
             _gender,
@@ -569,6 +532,7 @@ contract RekamMedisRS {
         returns (
             string memory nama,
             string memory ID,
+            string memory NIK,
             string memory golonganDarah,
             string memory tanggalLahir,
             string memory gender,
@@ -583,6 +547,7 @@ contract RekamMedisRS {
         return (
             p.nama,
             p.ID,
+            p.NIK,
             p.golonganDarah,
             p.tanggalLahir,
             p.gender,
