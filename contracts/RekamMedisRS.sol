@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.19;
 
 contract RekamMedisRS {
     struct AdminRS {
@@ -64,15 +64,6 @@ contract RekamMedisRS {
         string kota,
         string NIBRS
     );
-    // event AdminRSStatusDiubah(address indexed admin, bool aktif); // Dihapus sebelumnya
-
-    // event AdminRSInfoDiperbarui( // <-- Dihapus
-    //     address indexed admin,
-    //     string namaRumahSakit,
-    //     string alamatRumahSakit,
-    //     string kota,
-    //     string NIBRS
-    // );
 
     event DokterTerdaftar(address indexed dokter, string nama, address adminRS);
     event DokterStatusDiubah(address indexed dokter, bool aktif);
@@ -448,7 +439,13 @@ contract RekamMedisRS {
         daftarPasien.push(msg.sender);
         isPatientIDUsed[_IDPasien] = true;
         isPatientNIKUsed[_NIKPasien] = true;
-        emit PasienTerdaftar(msg.sender, _nama, _IDPasien, _NIKPasien, _adminRS);
+        emit PasienTerdaftar(
+            msg.sender,
+            _nama,
+            _IDPasien,
+            _NIKPasien,
+            _adminRS
+        );
     }
 
     function updatePasienData(
@@ -464,9 +461,15 @@ contract RekamMedisRS {
         require(isPasien[msg.sender], "Pasien tidak ditemukan.");
 
         // Validasi NIK baru jika ada perubahan
-        if (keccak256(abi.encodePacked(dataPasien[msg.sender].NIK)) != keccak256(abi.encodePacked(_NIK))) {
+        if (
+            keccak256(abi.encodePacked(dataPasien[msg.sender].NIK)) !=
+            keccak256(abi.encodePacked(_NIK))
+        ) {
             require(bytes(_NIK).length > 0, "NIK Pasien tidak boleh kosong.");
-            require(!isPatientNIKUsed[_NIK], "NIK baru sudah digunakan oleh pasien lain.");
+            require(
+                !isPatientNIKUsed[_NIK],
+                "NIK baru sudah digunakan oleh pasien lain."
+            );
             // Nonaktifkan NIK lama (jika ada) dan aktifkan NIK baru
             if (bytes(dataPasien[msg.sender].NIK).length > 0) {
                 isPatientNIKUsed[dataPasien[msg.sender].NIK] = false;
