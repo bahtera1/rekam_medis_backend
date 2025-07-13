@@ -202,8 +202,6 @@ contract RekamMedisRS {
         _;
     }
 
-    // Fungsi updateAdminRSDetails telah dihapus sepenuhnya
-
     function getAllAdminRSAddresses() external view returns (address[] memory) {
         return daftarAdmin;
     }
@@ -350,54 +348,6 @@ contract RekamMedisRS {
     ) external view returns (address[] memory) {
         require(isDokter[_dokter], "Dokter tidak ditemukan.");
         return dataDokter[_dokter].assignedPasien;
-    }
-
-    function registerPasien(
-        address _pasien,
-        string calldata _nama,
-        string calldata _IDPasien,
-        string calldata _NIKPasien,
-        address _adminRS
-    ) external hanyaAdminRS {
-        require(
-            !isPasien[_pasien],
-            "Pasien sudah terdaftar dengan alamat ini."
-        );
-        require(
-            !isDokter[_pasien],
-            "Alamat ini terdaftar sebagai dokter, tidak bisa menjadi pasien."
-        );
-        require(bytes(_IDPasien).length > 0, "ID Pasien tidak boleh kosong.");
-        require(!isPatientIDUsed[_IDPasien], "ID Pasien sudah digunakan.");
-        require(bytes(_NIKPasien).length > 0, "NIK Pasien tidak boleh kosong.");
-        require(!isPatientNIKUsed[_NIKPasien], "NIK Pasien sudah digunakan.");
-
-        require(
-            dataAdmin[_adminRS].aktif,
-            "Admin RS yang dirujuk tidak aktif."
-        );
-        require(
-            msg.sender == _adminRS,
-            "Hanya admin RS penanggung jawab yang bisa mendaftarkan pasien ini."
-        );
-
-        isPasien[_pasien] = true;
-        dataPasien[_pasien] = Pasien({
-            nama: _nama,
-            ID: _IDPasien,
-            NIK: _NIKPasien,
-            golonganDarah: "",
-            tanggalLahir: "",
-            gender: "",
-            alamat: "",
-            noTelepon: "",
-            email: "",
-            rumahSakitPenanggungJawab: _adminRS
-        });
-        daftarPasien.push(_pasien);
-        isPatientIDUsed[_IDPasien] = true;
-        isPatientNIKUsed[_NIKPasien] = true;
-        emit PasienTerdaftar(_pasien, _nama, _IDPasien, _NIKPasien, _adminRS);
     }
 
     function selfRegisterPasien(
@@ -652,24 +602,21 @@ contract RekamMedisRS {
         string calldata _catatan,
         string calldata _tipeRekamMedis
     ) external {
-        bool isValidActor = false;
-        if (msg.sender == _pasien && isPasien[msg.sender]) {
-            isValidActor = true;
-        } else if (isDokter[msg.sender] && dataDokter[msg.sender].aktif) {
-            if (
-                isPasien[_pasien] &&
-                dataDokter[msg.sender].adminRS ==
-                dataPasien[_pasien].rumahSakitPenanggungJawab &&
-                isAssigned(msg.sender, _pasien)
-            ) {
-                isValidActor = true;
-            }
-        }
+        // Hanya dokter aktif yang ditugaskan ke pasien yang dapat menambah rekam medis
         require(
-            isValidActor,
-            "Aktor tidak berhak menambah rekam medis untuk pasien ini."
+            isDokter[msg.sender] && dataDokter[msg.sender].aktif,
+            "Hanya dokter aktif yang dapat menambah rekam medis."
         );
         require(isPasien[_pasien], "Pasien tidak terdaftar.");
+        require(
+            dataDokter[msg.sender].adminRS ==
+                dataPasien[_pasien].rumahSakitPenanggungJawab,
+            "Dokter dan pasien tidak berada di rumah sakit yang sama."
+        );
+        require(
+            isAssigned(msg.sender, _pasien),
+            "Dokter ini tidak ditugaskan untuk menangani pasien tersebut."
+        );
 
         rekamMedisCount++;
         uint newId = rekamMedisCount;
@@ -757,13 +704,10 @@ contract RekamMedisRS {
             recordIds.length
         );
 
-        // 4. Kumpulkan Data Lengkap
-        // Looping melalui setiap ID, ambil datanya dari mapping `rekamMedis`, dan masukkan ke array hasil.
         for (uint i = 0; i < recordIds.length; i++) {
             records[i] = rekamMedis[recordIds[i]];
         }
 
-        // 5. Kembalikan Hasil
         return records;
     }
 
