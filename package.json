@@ -2,5 +2,10 @@
   "dependencies": {
     "@truffle/hdwallet-provider": "^2.1.15",
     "dotenv": "^17.1.0"
+  },
+  "devDependencies": {
+    "chai": "^5.2.1",
+    "chai-as-promised": "^8.0.1",
+    "mocha": "^11.7.1"
   }
 }
