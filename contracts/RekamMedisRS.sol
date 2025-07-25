@@ -114,7 +114,7 @@ contract RekamMedisRS {
 
     constructor() {
         // Tambahkan Admin RS pertama
-        address admin1 = 0x153f67a7B7169Ce3F13F8A81DC9CAe0bC27dbf21;
+        address admin1 = 0xDf953fA75aEB06ee7D182f52b58521a9524E077B;
         string memory namaRS1 = "RS Siloam Malang";
         string memory alamatRS1 = "Jl. Raya Langsep No. 2, Malang";
         string memory kotaRS1 = "Malang";
@@ -132,7 +132,7 @@ contract RekamMedisRS {
         emit AdminRSTerdaftar(admin1, namaRS1, alamatRS1, kotaRS1, NIBRS1);
 
         // Tambahkan Admin RS kedua
-        address admin2 = 0xd95A4eE9149fcb31C535eF6CbD65f4c23d9f7997;
+        address admin2 = 0x65846ad493b8aE8A5991704fd5d4c89cF1Ec4eA2;
         string memory namaRS2 = "RS Siloam Yogya";
         string memory alamatRS2 = "Jl. Laksda Adisucipto No. 32, Yogyakarta";
         string memory kotaRS2 = "Yogyakarta";
